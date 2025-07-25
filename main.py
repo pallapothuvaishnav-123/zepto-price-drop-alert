@@ -83,6 +83,9 @@ def extract_price(soup):
 def check_stock_and_price():
     import random
     
+    response = None
+    soup = None
+    
     # Try multiple times with different delays if rate limited
     for attempt in range(3):
         try:
@@ -107,6 +110,7 @@ def check_stock_and_price():
             response = requests.get(PRODUCT_URL, headers=headers, timeout=15)
             
             if response.status_code == 200:
+                soup = BeautifulSoup(response.text, 'html.parser')
                 break
             elif response.status_code == 429:
                 print(f"[WARNING] Rate limited (429) on attempt {attempt + 1}")
@@ -125,8 +129,11 @@ def check_stock_and_price():
             if attempt == 2:  # Last attempt
                 return None, None
             continue
-            
-        soup = BeautifulSoup(response.text, 'html.parser')
+    
+    # Check if we got a valid response
+    if soup is None:
+        print("[ERROR] Failed to get valid response after all attempts")
+        return None, None
     
     print(f"[DEBUG] Page title: {soup.title.string if soup.title else 'No title'}")
     
