@@ -159,65 +159,74 @@ def check_stock_and_price():
     # Get full page text for debugging
     page_text = soup.get_text().lower()
     
-    # Zepto-specific stock detection patterns
-    # Look for specific out of stock indicators first
-    out_of_stock_patterns = [
-        'out of stock',
-        'currently unavailable',
-        'sold out',
-        'not available',
-        'item unavailable',
-        'temporarily unavailable'
+    # Look for Zepto-specific button elements and attributes
+    add_buttons = soup.find_all('button', string=lambda t: t and ('add' in t.lower() or 'cart' in t.lower()))
+    
+    # Check for specific Zepto out of stock indicators
+    out_of_stock_indicators = [
+        # Text-based indicators
+        soup.find(string=lambda t: t and 'out of stock' in t.lower()),
+        soup.find(string=lambda t: t and 'currently unavailable' in t.lower()),
+        soup.find(string=lambda t: t and 'sold out' in t.lower()),
+        soup.find(string=lambda t: t and 'not available' in t.lower()),
+        
+        # Button-based indicators
+        soup.find('button', string=lambda t: t and 'out of stock' in t.lower()),
+        soup.find('button', {'disabled': True}),
+        
+        # Class-based indicators (common in e-commerce)
+        soup.find(['div', 'span', 'button'], {'class': lambda x: x and any(term in str(x).lower() for term in ['unavailable', 'out-of-stock', 'sold-out'])}),
     ]
     
-    # Look for in-stock indicators
-    in_stock_patterns = [
-        'add to cart',
-        'buy now',
-        'add to bag',
-        'purchase',
-        'order now'
+    # Look for actual functional "Add to Cart" buttons (not just text)
+    functional_add_buttons = [
+        soup.find('button', {'type': 'button'}, string=lambda t: t and 'add' in t.lower()),
+        soup.find('button', {'class': lambda x: x and 'add' in str(x).lower()}),
+        soup.find(['button', 'a'], {'onclick': lambda x: x and 'cart' in str(x).lower()}),
     ]
     
-    # Check for explicit out of stock text
-    has_out_of_stock_text = any(pattern in page_text for pattern in out_of_stock_patterns)
+    # Check the page structure - Zepto typically removes/disables add buttons when out of stock
+    has_functional_add_button = any(btn for btn in functional_add_buttons if btn and not btn.get('disabled'))
+    has_out_of_stock_indicator = any(indicator for indicator in out_of_stock_indicators if indicator)
     
-    # Check for add to cart or buy buttons
-    has_buy_option = any(pattern in page_text for pattern in in_stock_patterns)
+    # Additional checks for Zepto-specific patterns
+    page_lower = page_text.lower()
     
-    # Look for disabled buttons or out of stock button elements
-    disabled_buttons = soup.find_all('button', {'disabled': True})
-    out_of_stock_button = soup.find('button', string=lambda t: t and any(pattern in t.lower() for pattern in out_of_stock_patterns))
+    # Check if the page redirected to a "not found" or error page
+    is_error_page = any(term in page_lower for term in ['not found', '404', 'page not found', 'error'])
     
-    # Check if page title suggests it's available (like having price)
-    title_has_price = soup.title and '₹' in soup.title.string if soup.title else False
+    # Check for inventory-related messages
+    has_inventory_message = 'notify me when available' in page_lower or 'notify when in stock' in page_lower
     
-    print(f"[DEBUG] Page text contains out of stock: {has_out_of_stock_text}")
-    print(f"[DEBUG] Page text contains buy options: {has_buy_option}")
-    print(f"[DEBUG] Disabled buttons found: {len(disabled_buttons)}")
-    print(f"[DEBUG] Out of stock button found: {bool(out_of_stock_button)}")
-    print(f"[DEBUG] Title has price: {title_has_price}")
+    print(f"[DEBUG] Functional add buttons found: {has_functional_add_button}")
+    print(f"[DEBUG] Out of stock indicators found: {has_out_of_stock_indicator}")
+    print(f"[DEBUG] Is error page: {is_error_page}")
+    print(f"[DEBUG] Has inventory message: {has_inventory_message}")
+    print(f"[DEBUG] Page contains 'add to cart': {'add to cart' in page_lower}")
+    print(f"[DEBUG] Page contains 'out of stock': {'out of stock' in page_lower}")
     print(f"[DEBUG] Current price: ₹{current_price}")
     
-    # Determine stock status with Zepto-specific logic
-    if has_out_of_stock_text or out_of_stock_button:
+    # Zepto-specific stock determination logic
+    if is_error_page:
         in_stock = False
-        print("[DEBUG] Product marked as OUT OF STOCK - found explicit indicators")
-    elif has_buy_option and not has_out_of_stock_text:
+        print("[DEBUG] Product marked as OUT OF STOCK - error page detected")
+    elif has_out_of_stock_indicator:
+        in_stock = False
+        print("[DEBUG] Product marked as OUT OF STOCK - explicit out of stock indicator found")
+    elif has_inventory_message:
+        in_stock = False
+        print("[DEBUG] Product marked as OUT OF STOCK - notify when available message found")
+    elif has_functional_add_button and current_price:
         in_stock = True
-        print("[DEBUG] Product marked as IN STOCK - found buy options")
-    elif title_has_price and current_price:
+        print("[DEBUG] Product marked as IN STOCK - functional add button and price found")
+    elif current_price and 'out of stock' not in page_lower:
+        # If we have a price and no explicit out of stock message, likely in stock
         in_stock = True
-        print("[DEBUG] Product marked as IN STOCK - title shows price")
+        print("[DEBUG] Product marked as IN STOCK - price available and no out of stock text")
     else:
-        # For Zepto, if we can't find clear indicators, check the URL response
-        # If we got a proper product page with price, likely in stock
-        if current_price and not has_out_of_stock_text:
-            in_stock = True
-            print("[DEBUG] Product marked as IN STOCK - has price and no out of stock text")
-        else:
-            in_stock = False
-            print("[DEBUG] Product marked as OUT OF STOCK - no clear stock indicators")
+        # Default to out of stock if we can't determine clearly
+        in_stock = False
+        print("[DEBUG] Product marked as OUT OF STOCK - unable to find clear in-stock indicators")
     
     print(f"[DEBUG] Final determination - In Stock: {in_stock}")
     return in_stock, current_price
