@@ -294,11 +294,6 @@ def stock_loop():
                 # Send initial status
                 status_text = "IN STOCK ✅" if in_stock else "OUT OF STOCK ❌"
                 send_telegram_message(f"📊 Initial status: {status_text}\n💰 Current Price: {price_text}\n{PRODUCT_URL}")
-            else:
-                # Send heartbeat notification every check (every 5 minutes)
-                status_emoji = "✅" if in_stock else "❌"
-                current_time = time.strftime("%H:%M:%S", time.localtime())
-                send_telegram_message(f"🔄 Heartbeat #{check_count} - {current_time}\n🛒 Status: {status_emoji} {'IN STOCK' if in_stock else 'OUT OF STOCK'}\n💰 Price: {price_text}")
                 
             previous_status = in_stock
             if current_price is not None:
