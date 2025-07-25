@@ -6,7 +6,7 @@ import time
 import os
 
 # ==== CONFIG ====
-PRODUCT_URL = 'https://www.zeptonow.com/pn/taj-mahal-tea-rich-and-flavourful-chai/pvid/4ac2eaf8-4f7f-4b66-9d6a-2c7100199094'
+PRODUCT_URL = 'https://www.zeptonow.com/pn/boat-lunar-pro-smartwatch-139-display-lte-e-sim-cellular-calling-black/pvid/828c7e60-88d0-4a36-bd00-02b21ba23fff'
 CHECK_INTERVAL = 2 * 1  # 2 seconds for testing, change to 15*60 for 15 minutes
 
 # Telegram - Use environment variables for security
