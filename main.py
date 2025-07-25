@@ -127,64 +127,60 @@ def check_stock_and_price():
             continue
             
         soup = BeautifulSoup(response.text, 'html.parser')
-        
-        print(f"[DEBUG] Page title: {soup.title.string if soup.title else 'No title'}")
-        
-        # Extract price
-        current_price = extract_price(soup)
-        
-        # Look for Add to Cart button or similar buy buttons
-        add_to_cart_buttons = [
-            soup.find('button', string=lambda t: t and 'add to cart' in t.lower()),
-            soup.find('button', string=lambda t: t and 'add' in t.lower()),
-            soup.find('button', string=lambda t: t and 'buy' in t.lower()),
-            soup.find('div', {'class': lambda x: x and 'add' in str(x).lower()}),
-            soup.find('button', {'class': lambda x: x and 'add' in str(x).lower()})
-        ]
-        
-        # Look for specific out of stock indicators
-        out_of_stock_indicators = [
-            soup.find('button', string=lambda t: t and 'out of stock' in t.lower()),
-            soup.find('div', string=lambda t: t and 'out of stock' in t.lower()),
-            soup.find('span', string=lambda t: t and 'out of stock' in t.lower()),
-            soup.find('button', {'disabled': True, 'class': lambda x: x and 'disabled' in str(x).lower()}),
-            soup.find(string=lambda t: t and 'currently unavailable' in t.lower()),
-            soup.find(string=lambda t: t and 'sold out' in t.lower())
-        ]
-        
-        # Check for "Add to Cart" type buttons (indicates in stock)
-        has_add_button = any(btn for btn in add_to_cart_buttons if btn)
-        
-        # Check for explicit out of stock indicators
-        has_out_of_stock = any(indicator for indicator in out_of_stock_indicators if indicator)
-        
-        print(f"[DEBUG] Add to cart button found: {has_add_button}")
-        print(f"[DEBUG] Out of stock indicator found: {has_out_of_stock}")
-        print(f"[DEBUG] Current price: ₹{current_price}")
-        
-        # If we find an add button and no out of stock indicator, it's in stock
-        if has_add_button and not has_out_of_stock:
+    
+    print(f"[DEBUG] Page title: {soup.title.string if soup.title else 'No title'}")
+    
+    # Extract price
+    current_price = extract_price(soup)
+    
+    # Look for Add to Cart button or similar buy buttons
+    add_to_cart_buttons = [
+        soup.find('button', string=lambda t: t and 'add to cart' in t.lower()),
+        soup.find('button', string=lambda t: t and 'add' in t.lower()),
+        soup.find('button', string=lambda t: t and 'buy' in t.lower()),
+        soup.find('div', {'class': lambda x: x and 'add' in str(x).lower()}),
+        soup.find('button', {'class': lambda x: x and 'add' in str(x).lower()})
+    ]
+    
+    # Look for specific out of stock indicators
+    out_of_stock_indicators = [
+        soup.find('button', string=lambda t: t and 'out of stock' in t.lower()),
+        soup.find('div', string=lambda t: t and 'out of stock' in t.lower()),
+        soup.find('span', string=lambda t: t and 'out of stock' in t.lower()),
+        soup.find('button', {'disabled': True, 'class': lambda x: x and 'disabled' in str(x).lower()}),
+        soup.find(string=lambda t: t and 'currently unavailable' in t.lower()),
+        soup.find(string=lambda t: t and 'sold out' in t.lower())
+    ]
+    
+    # Check for "Add to Cart" type buttons (indicates in stock)
+    has_add_button = any(btn for btn in add_to_cart_buttons if btn)
+    
+    # Check for explicit out of stock indicators
+    has_out_of_stock = any(indicator for indicator in out_of_stock_indicators if indicator)
+    
+    print(f"[DEBUG] Add to cart button found: {has_add_button}")
+    print(f"[DEBUG] Out of stock indicator found: {has_out_of_stock}")
+    print(f"[DEBUG] Current price: ₹{current_price}")
+    
+    # If we find an add button and no out of stock indicator, it's in stock
+    if has_add_button and not has_out_of_stock:
+        in_stock = True
+    elif has_out_of_stock:
+        in_stock = False
+    else:
+        # Fallback: look at page content more broadly
+        page_text = soup.get_text().lower()
+        if 'add to cart' in page_text or 'buy now' in page_text:
             in_stock = True
-        elif has_out_of_stock:
+        elif 'out of stock' in page_text or 'unavailable' in page_text:
             in_stock = False
         else:
-            # Fallback: look at page content more broadly
-            page_text = soup.get_text().lower()
-            if 'add to cart' in page_text or 'buy now' in page_text:
-                in_stock = True
-            elif 'out of stock' in page_text or 'unavailable' in page_text:
-                in_stock = False
-            else:
-                # Default to True if we can't determine (assume in stock)
-                in_stock = True
-                print("[WARNING] Could not definitively determine stock status, assuming in stock")
-        
-        print(f"[DEBUG] Final determination - In Stock: {in_stock}")
-        return in_stock, current_price
-        
-    except Exception as e:
-        print(f"[ERROR] Error checking stock and price: {e}")
-        return None, None
+            # Default to True if we can't determine (assume in stock)
+            in_stock = True
+            print("[WARNING] Could not definitively determine stock status, assuming in stock")
+    
+    print(f"[DEBUG] Final determination - In Stock: {in_stock}")
+    return in_stock, current_price
 
 def stock_loop():
     previous_status = None
