@@ -40,7 +40,29 @@ def send_telegram_message(message):
 
 def extract_price(soup):
     """Extract price from the product page"""
+    import re
+    
     try:
+        # First try to extract from page title (most reliable for Zepto)
+        title = soup.title.string if soup.title else ""
+        print(f"[DEBUG] Page title for price extraction: {title}")
+        
+        # Look for price pattern in title like "Price @ ₹2499"
+        price_patterns = [
+            r'Price @ ₹\s*([\d,]+)',  # Zepto specific
+            r'₹\s*([\d,]+)',          # General rupee symbol
+            r'Rs\.?\s*([\d,]+)',      # Rs format
+            r'INR\s*([\d,]+)'         # INR format
+        ]
+        
+        for pattern in price_patterns:
+            price_match = re.search(pattern, title, re.IGNORECASE)
+            if price_match:
+                price = float(price_match.group(1).replace(',', ''))
+                if 50 <= price <= 50000:  # Reasonable price range
+                    print(f"[DEBUG] Found price in title: ₹{price}")
+                    return price
+        
         # Common price selectors for e-commerce sites
         price_selectors = [
             'span[data-testid*="price"]',
@@ -48,7 +70,9 @@ def extract_price(soup):
             '[class*="price"]',
             '[data-testid*="price"]',
             'span[class*="rupee"]',
-            'div[class*="price"]'
+            'div[class*="price"]',
+            '.amount',
+            '[class*="amount"]'
         ]
         
         # Look for price in various formats
@@ -57,21 +81,13 @@ def extract_price(soup):
             for element in price_elements:
                 text = element.get_text().strip()
                 # Extract numbers from price text (₹200, Rs.200, 200, etc.)
-                import re
-                price_match = re.search(r'[\d,]+(?:\.\d+)?', text.replace(',', ''))
-                if price_match:
-                    price = float(price_match.group())
-                    if 50 <= price <= 10000:  # Reasonable price range filter
-                        print(f"[DEBUG] Found price: ₹{price} in element: {text}")
-                        return price
-        
-        # Fallback: search for price in page title or meta tags
-        title = soup.title.string if soup.title else ""
-        price_match = re.search(r'₹\s*([\d,]+)', title)
-        if price_match:
-            price = float(price_match.group(1).replace(',', ''))
-            print(f"[DEBUG] Found price in title: ₹{price}")
-            return price
+                for pattern in price_patterns:
+                    price_match = re.search(pattern, text, re.IGNORECASE)
+                    if price_match:
+                        price = float(price_match.group(1).replace(',', ''))
+                        if 50 <= price <= 50000:  # Reasonable price range filter
+                            print(f"[DEBUG] Found price: ₹{price} in element: {text}")
+                            return price
             
         print("[WARNING] Could not find price on page")
         return None
@@ -140,51 +156,68 @@ def check_stock_and_price():
     # Extract price
     current_price = extract_price(soup)
     
-    # Look for Add to Cart button or similar buy buttons
-    add_to_cart_buttons = [
-        soup.find('button', string=lambda t: t and 'add to cart' in t.lower()),
-        soup.find('button', string=lambda t: t and 'add' in t.lower()),
-        soup.find('button', string=lambda t: t and 'buy' in t.lower()),
-        soup.find('div', {'class': lambda x: x and 'add' in str(x).lower()}),
-        soup.find('button', {'class': lambda x: x and 'add' in str(x).lower()})
+    # Get full page text for debugging
+    page_text = soup.get_text().lower()
+    
+    # Zepto-specific stock detection patterns
+    # Look for specific out of stock indicators first
+    out_of_stock_patterns = [
+        'out of stock',
+        'currently unavailable',
+        'sold out',
+        'not available',
+        'item unavailable',
+        'temporarily unavailable'
     ]
     
-    # Look for specific out of stock indicators
-    out_of_stock_indicators = [
-        soup.find('button', string=lambda t: t and 'out of stock' in t.lower()),
-        soup.find('div', string=lambda t: t and 'out of stock' in t.lower()),
-        soup.find('span', string=lambda t: t and 'out of stock' in t.lower()),
-        soup.find('button', {'disabled': True, 'class': lambda x: x and 'disabled' in str(x).lower()}),
-        soup.find(string=lambda t: t and 'currently unavailable' in t.lower()),
-        soup.find(string=lambda t: t and 'sold out' in t.lower())
+    # Look for in-stock indicators
+    in_stock_patterns = [
+        'add to cart',
+        'buy now',
+        'add to bag',
+        'purchase',
+        'order now'
     ]
     
-    # Check for "Add to Cart" type buttons (indicates in stock)
-    has_add_button = any(btn for btn in add_to_cart_buttons if btn)
+    # Check for explicit out of stock text
+    has_out_of_stock_text = any(pattern in page_text for pattern in out_of_stock_patterns)
     
-    # Check for explicit out of stock indicators
-    has_out_of_stock = any(indicator for indicator in out_of_stock_indicators if indicator)
+    # Check for add to cart or buy buttons
+    has_buy_option = any(pattern in page_text for pattern in in_stock_patterns)
     
-    print(f"[DEBUG] Add to cart button found: {has_add_button}")
-    print(f"[DEBUG] Out of stock indicator found: {has_out_of_stock}")
+    # Look for disabled buttons or out of stock button elements
+    disabled_buttons = soup.find_all('button', {'disabled': True})
+    out_of_stock_button = soup.find('button', string=lambda t: t and any(pattern in t.lower() for pattern in out_of_stock_patterns))
+    
+    # Check if page title suggests it's available (like having price)
+    title_has_price = soup.title and '₹' in soup.title.string if soup.title else False
+    
+    print(f"[DEBUG] Page text contains out of stock: {has_out_of_stock_text}")
+    print(f"[DEBUG] Page text contains buy options: {has_buy_option}")
+    print(f"[DEBUG] Disabled buttons found: {len(disabled_buttons)}")
+    print(f"[DEBUG] Out of stock button found: {bool(out_of_stock_button)}")
+    print(f"[DEBUG] Title has price: {title_has_price}")
     print(f"[DEBUG] Current price: ₹{current_price}")
     
-    # If we find an add button and no out of stock indicator, it's in stock
-    if has_add_button and not has_out_of_stock:
-        in_stock = True
-    elif has_out_of_stock:
+    # Determine stock status with Zepto-specific logic
+    if has_out_of_stock_text or out_of_stock_button:
         in_stock = False
+        print("[DEBUG] Product marked as OUT OF STOCK - found explicit indicators")
+    elif has_buy_option and not has_out_of_stock_text:
+        in_stock = True
+        print("[DEBUG] Product marked as IN STOCK - found buy options")
+    elif title_has_price and current_price:
+        in_stock = True
+        print("[DEBUG] Product marked as IN STOCK - title shows price")
     else:
-        # Fallback: look at page content more broadly
-        page_text = soup.get_text().lower()
-        if 'add to cart' in page_text or 'buy now' in page_text:
+        # For Zepto, if we can't find clear indicators, check the URL response
+        # If we got a proper product page with price, likely in stock
+        if current_price and not has_out_of_stock_text:
             in_stock = True
-        elif 'out of stock' in page_text or 'unavailable' in page_text:
-            in_stock = False
+            print("[DEBUG] Product marked as IN STOCK - has price and no out of stock text")
         else:
-            # Default to True if we can't determine (assume in stock)
-            in_stock = True
-            print("[WARNING] Could not definitively determine stock status, assuming in stock")
+            in_stock = False
+            print("[DEBUG] Product marked as OUT OF STOCK - no clear stock indicators")
     
     print(f"[DEBUG] Final determination - In Stock: {in_stock}")
     return in_stock, current_price
