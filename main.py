@@ -7,7 +7,7 @@ import os
 
 # ==== CONFIG ====
 PRODUCT_URL = 'https://www.zeptonow.com/pn/boat-lunar-pro-smartwatch-139-display-lte-e-sim-cellular-calling-black/pvid/828c7e60-88d0-4a36-bd00-02b21ba23fff'
-CHECK_INTERVAL = 5 * 60  # 5 minutes to avoid rate limiting
+CHECK_INTERVAL = 2 * 1  # 2 seconds for testing, change to 15*60 for 15 minutes
 
 # Telegram - Use environment variables for security
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN', '7314069619:AAEwlHGphXG22HDC72sLLM-e2EwPuuTLikU')
@@ -81,50 +81,15 @@ def extract_price(soup):
         return None
 
 def check_stock_and_price():
-    import random
-    
-    # Try multiple times with different delays if rate limited
-    for attempt in range(3):
-        try:
-            # Add random delay to appear more human-like
-            if attempt > 0:
-                delay = random.uniform(10, 30)  # 10-30 seconds
-                print(f"[INFO] Attempt {attempt + 1}: Waiting {delay:.1f} seconds before retry...")
-                time.sleep(delay)
-            
-            headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-                'Accept-Language': 'en-US,en;q=0.5',
-                'Accept-Encoding': 'gzip, deflate',
-                'Connection': 'keep-alive',
-                'Upgrade-Insecure-Requests': '1',
-            }
-            
-            # Add small random delay before request
-            time.sleep(random.uniform(1, 3))
-            
-            response = requests.get(PRODUCT_URL, headers=headers, timeout=15)
-            
-            if response.status_code == 200:
-                break
-            elif response.status_code == 429:
-                print(f"[WARNING] Rate limited (429) on attempt {attempt + 1}")
-                if attempt == 2:  # Last attempt
-                    print("[ERROR] All retry attempts failed due to rate limiting")
-                    return None, None
-                continue
-            else:
-                print(f"[ERROR] HTTP {response.status_code} when fetching product page")
-                if attempt == 2:  # Last attempt
-                    return None, None
-                continue
-                
-        except requests.exceptions.RequestException as e:
-            print(f"[ERROR] Request failed on attempt {attempt + 1}: {e}")
-            if attempt == 2:  # Last attempt
-                return None, None
-            continue
+    try:
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        }
+        response = requests.get(PRODUCT_URL, headers=headers, timeout=10)
+        
+        if response.status_code != 200:
+            print(f"[ERROR] HTTP {response.status_code} when fetching product page")
+            return None, None
             
         soup = BeautifulSoup(response.text, 'html.parser')
         
@@ -189,7 +154,6 @@ def check_stock_and_price():
 def stock_loop():
     previous_status = None
     previous_price = None
-    consecutive_failures = 0
     
     # Send initial startup message
     send_telegram_message("🤖 Stock & Price monitor started! Monitoring product...")
@@ -199,20 +163,9 @@ def stock_loop():
             in_stock, current_price = check_stock_and_price()
             
             if in_stock is None:
-                consecutive_failures += 1
-                print(f"[WARNING] Could not determine stock status, skipping this check (failures: {consecutive_failures})")
-                
-                # Send alert if too many consecutive failures
-                if consecutive_failures == 5:
-                    send_telegram_message("⚠️ WARNING: Stock monitor has failed 5 times in a row. This might be due to rate limiting or website changes.")
-                elif consecutive_failures >= 10:
-                    send_telegram_message("🚨 CRITICAL: Stock monitor has failed 10+ times. Please check the bot.")
-                
+                print("[WARNING] Could not determine stock status, skipping this check")
                 time.sleep(CHECK_INTERVAL)
                 continue
-            else:
-                # Reset failure counter on success
-                consecutive_failures = 0
                 
             print(f"[INFO] In Stock: {in_stock}, Price: ₹{current_price}")
             
