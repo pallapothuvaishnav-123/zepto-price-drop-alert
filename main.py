@@ -235,12 +235,14 @@ def stock_loop():
     previous_status = None
     previous_price = None
     consecutive_failures = 0
+    check_count = 0
     
     # Send initial startup message
     send_telegram_message("🤖 Stock & Price monitor started! Monitoring product...")
     
     while True:
         try:
+            check_count += 1
             in_stock, current_price = check_stock_and_price()
             
             if in_stock is None:
@@ -259,7 +261,7 @@ def stock_loop():
                 # Reset failure counter on success
                 consecutive_failures = 0
                 
-            print(f"[INFO] In Stock: {in_stock}, Price: ₹{current_price}")
+            print(f"[INFO] Check #{check_count} - In Stock: {in_stock}, Price: ₹{current_price}")
             
             # Prepare price info for messages
             price_text = f"₹{current_price}" if current_price else "Price not found"
@@ -292,6 +294,11 @@ def stock_loop():
                 # Send initial status
                 status_text = "IN STOCK ✅" if in_stock else "OUT OF STOCK ❌"
                 send_telegram_message(f"📊 Initial status: {status_text}\n💰 Current Price: {price_text}\n{PRODUCT_URL}")
+            else:
+                # Send heartbeat notification every check (every 5 minutes)
+                status_emoji = "✅" if in_stock else "❌"
+                current_time = time.strftime("%H:%M:%S", time.localtime())
+                send_telegram_message(f"🔄 Heartbeat #{check_count} - {current_time}\n🛒 Status: {status_emoji} {'IN STOCK' if in_stock else 'OUT OF STOCK'}\n💰 Price: {price_text}")
                 
             previous_status = in_stock
             if current_price is not None:
